@@ -1,11 +1,12 @@
 from flask import Flask, request, jsonify
 import requests
 import uuid
+import os 
 
 app = Flask(__name__)
 
-PROXY_URL = "http://172.31.30.140:5000/query"
-API_KEY = "MY_SECRET_KEY_123"
+PROXY_URL = os.environ["PROXY_URL"]
+API_KEY = os.environ["API_KEY"]
 
 BLOCKLIST = ["drop ", "truncate ", "shutdown ", "grant ", "revoke "]
 

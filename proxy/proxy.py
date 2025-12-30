@@ -1,20 +1,25 @@
 from flask import Flask, request, jsonify
 import mysql.connector
-import random
-import subprocess
-import time
-import uuid
+import random, subprocess, time, uuid, os
 
 app = Flask(__name__)
 
-MANAGER = {"host": "172.31.26.162", "user": "app", "password": "AppPass123!"}
+MYSQL_DB   = os.getenv("MYSQL_DB", "sakila")
+MYSQL_USER = os.getenv("MYSQL_USER", "app")
+MYSQL_PASS = os.getenv("MYSQL_PASS", "AppPass123!")
+
+MANAGER_HOST = os.environ["MANAGER_HOST"]          
+WORKER1_HOST = os.environ["WORKER1_HOST"]          
+WORKER2_HOST = os.environ["WORKER2_HOST"]          
+
+MANAGER = {"host": MANAGER_HOST, "user": MYSQL_USER, "password": MYSQL_PASS}
 WORKERS = [
-    {"host": "172.31.30.100", "user": "app", "password": "AppPass123!"},
-    {"host": "172.31.20.128", "user": "app", "password": "AppPass123!"},
+    {"host": WORKER1_HOST, "user": MYSQL_USER, "password": MYSQL_PASS},
+    {"host": WORKER2_HOST, "user": MYSQL_USER, "password": MYSQL_PASS},
 ]
 
 def is_read(sql: str) -> bool:
-    s = sql.strip().lower()
+    s = (sql or "").strip().lower()
     return s.startswith("select") or s.startswith("show") or s.startswith("describe")
 
 def ping_ms(host: str) -> float:
@@ -36,19 +41,15 @@ def run_mysql(target, sql):
         host=target["host"],
         user=target["user"],
         password=target["password"],
-        database="sakila",
+        database=MYSQL_DB,
         autocommit=True
     )
     cur = conn.cursor()
     cur.execute(sql)
-    if cur.with_rows:
-        rows = cur.fetchall()
-        cur.close()
-        conn.close()
-        return {"rows": rows}
+    rows = cur.fetchall() if cur.with_rows else []
     cur.close()
     conn.close()
-    return {"rows": []}
+    return {"rows": rows}
 
 @app.get("/health")
 def health():
@@ -58,7 +59,7 @@ def health():
 def query():
     body = request.get_json(force=True)
     sql = body.get("sql", "")
-    mode = body.get("mode", "direct")  # direct | random | ping
+    mode = body.get("mode", "direct")
     req_id = body.get("request_id") or str(uuid.uuid4())
 
     read = is_read(sql)
@@ -75,7 +76,6 @@ def query():
             target_name = "manager"
 
     result = run_mysql(target, sql)
-
     print(f"[{req_id}] mode={mode} type={'READ' if read else 'WRITE'} target={target_name}")
 
     return jsonify({
