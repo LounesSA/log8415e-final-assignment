@@ -3,11 +3,7 @@ import boto3
 import argparse
 import os
 import uuid
-
-try:
-    import requests
-except Exception:
-    requests = None
+import requests
 
 
 REGION = "ca-central-1"
