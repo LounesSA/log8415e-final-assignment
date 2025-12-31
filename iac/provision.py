@@ -1,21 +1,30 @@
 import time
 import boto3
+import argparse
+import os
+import uuid
+
+try:
+    import requests
+except Exception:
+    requests = None
 
 
 REGION = "ca-central-1"
-STACK  = "log8415e-demo2"
+STACK  = "log8415e-demo3"
 
 ADMIN_CIDR = "142.116.246.18/32"
-KEY_NAME   = "log8415e-key"        
-API_KEY    = "MY_SECRET_KEY_123"  
+KEY_NAME   = "log8415e-key"
+API_KEY    = "MY_SECRET_KEY_123"
 
 REPO_URL = "https://github.com/LounesSA/log8415e-final-assignment.git"
 
 ec2 = boto3.client("ec2", region_name=REGION)
 
+
 def ubuntu_ami():
     imgs = ec2.describe_images(
-        Owners=["099720109477"], 
+        Owners=["099720109477"],
         Filters=[
             {"Name": "name", "Values": ["ubuntu/images/hvm-ssd/ubuntu-jammy-22.04-amd64-server-*"]},
             {"Name": "state", "Values": ["available"]},
@@ -46,7 +55,6 @@ def add_ingress(sg_id, perms):
     try:
         ec2.authorize_security_group_ingress(GroupId=sg_id, IpPermissions=perms)
     except Exception as e:
-        # ignore duplicate rules
         if "InvalidPermission.Duplicate" in str(e):
             return
         raise
@@ -282,7 +290,71 @@ systemctl restart log8415e-gatekeeper
 """
 
 
+def percentile(sorted_vals, p):
+    if not sorted_vals:
+        return None
+    idx = int(p * (len(sorted_vals) - 1))
+    return sorted_vals[idx]
+
+
+def run_bench(gk_pub_ip, n):
+    if requests is None:
+        raise RuntimeError("Missing 'requests'. Install: python3 -m pip install --user requests")
+
+    url = f"http://{gk_pub_ip}/query"
+    headers = {"Content-Type": "application/json", "X-API-Key": API_KEY}
+
+    def one_mode(mode, sql, count):
+        times = []
+        errors = 0
+        for _ in range(count):
+            req_id = str(uuid.uuid4())
+            t0 = time.time()
+            try:
+                r = requests.post(url, headers=headers, json={"sql": sql, "mode": mode, "request_id": req_id}, timeout=15)
+                dt = (time.time() - t0) * 1000.0
+                if r.status_code >= 400:
+                    errors += 1
+                else:
+                    times.append(dt)
+            except Exception:
+                errors += 1
+        times.sort()
+        return {
+            "count": len(times),
+            "errors": errors,
+            "avg_ms": (sum(times) / len(times)) if times else None,
+            "p50_ms": percentile(times, 0.50),
+            "p95_ms": percentile(times, 0.95),
+            "max_ms": max(times) if times else None,
+        }
+
+    read_sql  = "SELECT COUNT(*) FROM sbtest.writes;"
+    write_sql = "INSERT INTO sbtest.writes(name) VALUES(CONCAT('Bench_', UUID()));"
+
+    results = {}
+    for mode in ["direct", "random", "ping"]:
+        results[mode] = {
+            "reads": one_mode(mode, read_sql, n),
+            "writes": one_mode(mode, write_sql, n),
+        }
+
+    os.makedirs("docs", exist_ok=True)
+    out = f"docs/benchmark_{n}.txt"
+    with open(out, "w") as f:
+        f.write(str(results) + "\n")
+
+    print("\nBENCHMARK ✅")
+    print("Saved to:", out)
+    print(results)
+
+
 def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--bench", action="store_true", help="Run benchmark against Gatekeeper after provisioning")
+    parser.add_argument("--n", type=int, default=1000, help="Number of reads and writes per mode")
+    args = parser.parse_args()
+
     ami = ubuntu_ami()
     vpc, subnet = default_vpc_subnet()
     sg_gk, sg_px, sg_db = create_sgs(vpc)
@@ -320,6 +392,10 @@ def main():
     print("Test:")
     print(f'curl -X POST http://{gk_pub}/query -H "Content-Type: application/json" -H "X-API-Key: {API_KEY}" '
           f'-d \'{{"sql":"SELECT COUNT(*) FROM sakila.actor;","mode":"random"}}\'')
+
+    if args.bench:
+        print("\nRunning benchmark... (this can take a while)")
+        run_bench(gk_pub, args.n)
 
 
 if __name__ == "__main__":
