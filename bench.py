@@ -6,11 +6,10 @@ import requests
 GATEKEEPER = "http://16.52.72.103/query"
 API_KEY = "MY_SECRET_KEY_123"
 
-# Start smaller first; once stable, change to 1000
 N_WRITES = 1000
 N_READS = 1000
 
-SLEEP_SEC = 0.005  # small throttle to avoid overloading the proxy/db
+SLEEP_SEC = 0.005  
 
 def call(sql, mode):
     payload = {"sql": sql, "mode": mode, "request_id": str(uuid.uuid4())}
