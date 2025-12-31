@@ -386,7 +386,7 @@ def main():
     gk_priv, gk_pub = get_ips(gk)
     print("    gatekeeper", gk_priv, gk_pub)
 
-    print("\nDONE ✅")
+    print("\nDONE")
     print("Gatekeeper health:", f"http://{gk_pub}/health")
     print("Gatekeeper query :", f"http://{gk_pub}/query")
     print("Test:")
