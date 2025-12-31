@@ -139,7 +139,7 @@ grep -q '^log_replica_updates' "$CNF" || echo 'log_replica_updates = ON' >> "$CN
 
 systemctl restart mysql
 
-# Users (mysql_native_password avoids "secure connection required" issues)
+
 mysql -e "CREATE USER IF NOT EXISTS 'repl'@'%' IDENTIFIED WITH mysql_native_password BY 'ReplPass123!';"
 mysql -e "GRANT REPLICATION SLAVE ON *.* TO 'repl'@'%';"
 
@@ -148,7 +148,7 @@ mysql -e "CREATE USER IF NOT EXISTS 'sb'@'localhost' IDENTIFIED WITH mysql_nativ
 mysql -e "GRANT ALL PRIVILEGES ON *.* TO 'sb'@'localhost';"
 mysql -e "FLUSH PRIVILEGES;"
 
-# Sakila
+
 if ! mysql -e "USE sakila;" >/dev/null 2>&1; then
   cd /tmp
   wget -q https://downloads.mysql.com/docs/sakila-db.zip -O sakila-db.zip
@@ -157,7 +157,7 @@ if ! mysql -e "USE sakila;" >/dev/null 2>&1; then
   mysql < sakila-db/sakila-data.sql
 fi
 
-# sbtest DB used by your bench (writes)
+
 mysql -e "CREATE DATABASE IF NOT EXISTS sbtest;"
 mysql -e "USE sbtest; CREATE TABLE IF NOT EXISTS writes (id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY, name VARCHAR(64) NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP) ENGINE=InnoDB;"
 
